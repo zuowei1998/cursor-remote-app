@@ -542,22 +542,34 @@ async function verifyTotp(code) {
   }
 }
 
+// App root on GitHub Pages is /<repo>/, not /. Absolute "/" would open the wrong site from the home screen.
+const appRoot = () => new URL('./', location.href);
+const appRootPath = () => appRoot().pathname;
+
 // iOS home-screen apps have a separate localStorage from Safari.
-// Prefer /h/<code> paths — Add to Home Screen often drops ?query and #hash.
+// Prefer path /h/<code> on the relay; on GitHub Pages use ?h= (Pages cannot serve /h/*).
 function handoffCodeFromLocation() {
-  const path = /^\/h\/([\w-]{20,})\/?$/.exec(location.pathname);
+  const path = /(?:^|\/)h\/([\w-]{20,})\/?$/.exec(location.pathname);
   if (path) return path[1];
   const q = /[?&]h=([\w-]{20,})/.exec(location.search);
   return q ? q[1] : null;
 }
 
+function handoffKeyFromLocation() {
+  const q = /[?&]k=([\w-]{40,})/.exec(location.search);
+  return q ? q[1] : null;
+}
+
 async function takeHandoff() {
   const code = handoffCodeFromLocation();
+  const k = handoffKeyFromLocation();
+  if (k) store.set('key', k);
   if (!code) return false;
-  // Safari is already logged in: keep /h/... URL for "Add to Home Screen", do not consume yet.
+  // Safari is already logged in: keep handoff URL for "Add to Home Screen", do not consume yet.
   if (store.get('token')) return false;
+  if (!base) return false;
   try {
-    const r = await fetch(location.origin.replace(/\/?$/, '/') + 'api/handoff/redeem', {
+    const r = await fetch(base.replace(/\/?$/, '/') + 'api/handoff/redeem', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code }),
@@ -567,29 +579,32 @@ async function takeHandoff() {
     if (!r.ok || !body.key || !body.token) return false;
     store.set('key', body.key);
     store.set('token', body.token);
-    history.replaceState(null, '', '/');
+    history.replaceState(null, '', appRootPath());
     return true;
   } catch {
     return false;
   }
 }
 
-function setInstallManifest(startPath) {
+function setInstallManifest(startUrl) {
   // iOS uses manifest start_url for the home-screen icon, not the page you were viewing.
+  // Blob manifests need absolute URLs; keep scope under the app directory (GitHub Pages subpath).
+  const root = appRoot();
+  const start = new URL(startUrl || './', root).href;
   const man = {
     name: 'Cursor Remote',
     short_name: 'Cursor Remote',
     description: '在手机上查看和操作电脑上的 Cursor',
-    start_url: startPath,
-    scope: '/',
+    start_url: start,
+    scope: root.href,
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#1e1e1e',
     theme_color: '#1e1e1e',
     lang: 'zh-CN',
     icons: [
-      { src: new URL('icon-192.png', location.href).href, sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: new URL('icon-512.png', location.href).href, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      { src: new URL('icon-192.png', root).href, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: new URL('icon-512.png', root).href, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
   };
   let link = document.querySelector('link[rel="manifest"]');
@@ -609,9 +624,14 @@ async function prepareHomeScreenHandoff() {
   const r = await post('/api/handoff', { key: store.get('key') || '' });
   const body = await r.json().catch(() => ({}));
   if (!r.ok || !body.code) throw new Error(body.error || '生成迁移码失败');
-  const start = '/h/' + body.code;
-  const url = location.origin.replace(/\/?$/, '') + start;
-  history.replaceState(null, '', start);
+  const key = store.get('key') || '';
+  // Relay can serve /h/<code>; GitHub Pages cannot — use ?h= so the icon opens this app.
+  const onPages = !info?.self;
+  const start = onPages
+    ? `./?h=${body.code}${key ? '&k=' + encodeURIComponent(key) : ''}`
+    : `/h/${body.code}`;
+  const url = new URL(start, appRoot()).href;
+  history.replaceState(null, '', url);
   setInstallManifest(start);
   return { url, minutes: body.minutes || 30 };
 }
@@ -627,20 +647,22 @@ async function boot() {
     return;
   }
   gate({ msg: '正在查找电脑…' });
-  await takeHandoff();
   try {
     const r = await fetch('url.json?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('http ' + r.status);
     info = await r.json();
   } catch {
     // Opened on the relay/tunnel itself: treat as self even if url.json briefly 502s.
-    if (/lhr\.life$|:3939$/.test(location.host) || location.port === '3939') {
+    if (/lhr\.life$|:3939$|trycloudflare\.com$/.test(location.host) || location.port === '3939') {
       info = { self: true };
     } else {
       autoRetry();
       return gate({ msg: '读取失败，请检查手机网络（公网地址可能已更新，请重新扫电脑上的码）', err: true, retry: true });
     }
   }
+  // Handoff may carry the url-key in ?k= so GitHub Pages can decrypt before redeeming.
+  const hk = handoffKeyFromLocation();
+  if (hk) store.set('key', hk);
   if (pending) store.set('key', pending.key);
   try {
     base = await resolveBase();
@@ -649,6 +671,7 @@ async function boot() {
     if (e.stale) { store.set('key', null); store.set('token', null); }
     return showUnpaired(e.message);
   }
+  await takeHandoff();
   if (pending) return pair();
   if (!store.get('token')) return showUnpaired();
   let me;
@@ -1828,6 +1851,9 @@ $('mic').onclick = () => {
 
 window.addEventListener('resize', () => { layoutStage(); applyQuality(); });
 if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// Ensure "Add to Home Screen" opens this app dir (not github.io root) even without the install wizard.
+setInstallManifest('./');
 
 setCrop(crop);
 setMode(mode);
