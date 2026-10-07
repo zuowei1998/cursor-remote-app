@@ -1,7 +1,7 @@
 {
   "name": "Cursor Remote",
   "short_name": "Cursor Remote",
-  "description": "\u5728\u624b\u673a\u4e0a\u67e5\u770b\u548c\u64cd\u4f5c\u7535\u8111\u4e0a\u7684 Cursor",
+  "description": "在手机上查看和操作电脑上的 Cursor",
   "start_url": "https://zuowei1998.github.io/cursor-remote-app/",
   "scope": "https://zuowei1998.github.io/cursor-remote-app/",
   "display": "standalone",
