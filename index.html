@@ -587,24 +587,26 @@ async function takeHandoff() {
 }
 
 function setInstallManifest(startUrl) {
-  // iOS uses manifest start_url for the home-screen icon, not the page you were viewing.
-  // Blob manifests need absolute URLs; keep scope under the app directory (GitHub Pages subpath).
+  // iOS uses manifest start_url for the home-screen icon. Prefer origin-absolute paths
+  // (/repo/...), not blob+relative — iOS often resolves those to github.io root → 404.
   const root = appRoot();
-  const start = new URL(startUrl || './', root).href;
+  const start = new URL(startUrl || './', root);
+  const startPath = start.pathname + start.search + start.hash;
+  const scopePath = root.pathname.endsWith('/') ? root.pathname : root.pathname + '/';
   const man = {
     name: 'Cursor Remote',
     short_name: 'Cursor Remote',
     description: '在手机上查看和操作电脑上的 Cursor',
-    start_url: start,
-    scope: root.href,
+    start_url: startPath,
+    scope: scopePath,
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#1e1e1e',
     theme_color: '#1e1e1e',
     lang: 'zh-CN',
     icons: [
-      { src: new URL('icon-192.png', root).href, sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: new URL('icon-512.png', root).href, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      { src: new URL('icon-192.png', root).pathname, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: new URL('icon-512.png', root).pathname, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
     ],
   };
   let link = document.querySelector('link[rel="manifest"]');
@@ -625,13 +627,13 @@ async function prepareHomeScreenHandoff() {
   const body = await r.json().catch(() => ({}));
   if (!r.ok || !body.code) throw new Error(body.error || '生成迁移码失败');
   const key = store.get('key') || '';
-  // Relay can serve /h/<code>; GitHub Pages cannot — use ?h= so the icon opens this app.
+  // Relay can serve /h/<code>; GitHub Pages cannot — use ?h= under the app directory.
   const onPages = !info?.self;
   const start = onPages
-    ? `./?h=${body.code}${key ? '&k=' + encodeURIComponent(key) : ''}`
+    ? `${appRootPath()}?h=${body.code}${key ? '&k=' + encodeURIComponent(key) : ''}`
     : `/h/${body.code}`;
-  const url = new URL(start, appRoot()).href;
-  history.replaceState(null, '', url);
+  const url = new URL(start, location.origin).href;
+  history.replaceState(null, '', start);
   setInstallManifest(start);
   return { url, minutes: body.minutes || 30 };
 }
@@ -1851,9 +1853,6 @@ $('mic').onclick = () => {
 
 window.addEventListener('resize', () => { layoutStage(); applyQuality(); });
 if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
-
-// Ensure "Add to Home Screen" opens this app dir (not github.io root) even without the install wizard.
-setInstallManifest('./');
 
 setCrop(crop);
 setMode(mode);
