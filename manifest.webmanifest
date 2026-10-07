@@ -1,17 +1,32 @@
 {
   "name": "Cursor Remote",
   "short_name": "Cursor Remote",
-  "description": "在手机上查看和操作电脑上的 Cursor",
-  "start_url": "./",
-  "scope": "./",
+  "description": "\u5728\u624b\u673a\u4e0a\u67e5\u770b\u548c\u64cd\u4f5c\u7535\u8111\u4e0a\u7684 Cursor",
+  "start_url": "https://zuowei1998.github.io/cursor-remote-app/",
+  "scope": "https://zuowei1998.github.io/cursor-remote-app/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1e1e1e",
   "theme_color": "#1e1e1e",
   "lang": "zh-CN",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "https://zuowei1998.github.io/cursor-remote-app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://zuowei1998.github.io/cursor-remote-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://zuowei1998.github.io/cursor-remote-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
